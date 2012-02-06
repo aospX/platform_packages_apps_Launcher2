@@ -34,6 +34,7 @@ import android.content.ClipDescription;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -55,6 +56,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.view.Display;
 import android.view.DragEvent;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -67,6 +69,7 @@ import android.widget.Toast;
 import com.android.launcher.R;
 import com.android.launcher2.FolderIcon.FolderRingAnimator;
 import com.android.launcher2.InstallWidgetReceiver.WidgetMimeTypeHandlerData;
+import com.android.launcher2.preference.PreferencesProvider;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -77,7 +80,7 @@ import java.util.List;
  * Each page contains a number of icons, folders or widgets the user can
  * interact with. A workspace is meant to be used with a fixed width only.
  */
-public class Workspace extends SmoothPagedView
+public class Workspace extends PagedView
         implements DropTarget, DragSource, DragScroller, View.OnTouchListener,
         DragController.DragListener {
     @SuppressWarnings({"UnusedDeclaration"})
@@ -114,8 +117,6 @@ public class Workspace extends SmoothPagedView
     private final WallpaperManager mWallpaperManager;
     private IBinder mWindowToken;
     private static final float WALLPAPER_SCREENS_SPAN = 2f;
-
-    private int mDefaultPage;
 
     /**
      * CellInfo for the cell that is currently being dragged
@@ -237,6 +238,14 @@ public class Workspace extends SmoothPagedView
     private float[] mNewRotationYs;
     private float mTransitionProgress;
 
+    // Preferences
+    private int mNumberHomescreens;
+    private int mDefaultHomescreen;
+    private boolean mShowSearchBar;
+    private boolean mResizeAnyWidget;
+    private boolean mShowScrollingIndicator;
+    private boolean mFadeScrollingIndicator;
+
     /**
      * Used to inflate the Workspace from XML.
      *
@@ -302,11 +311,22 @@ public class Workspace extends SmoothPagedView
         // if the value is manually specified, use that instead
         cellCountX = a.getInt(R.styleable.Workspace_cellCountX, cellCountX);
         cellCountY = a.getInt(R.styleable.Workspace_cellCountY, cellCountY);
-        mDefaultPage = a.getInt(R.styleable.Workspace_defaultScreen, 1);
         a.recycle();
 
         LauncherModel.updateWorkspaceLayoutCells(cellCountX, cellCountY);
         setHapticFeedbackEnabled(false);
+
+        // Preferences
+        mNumberHomescreens = PreferencesProvider.Interface.Homescreen.getNumberHomescreens(context);
+        mDefaultHomescreen = PreferencesProvider.Interface.Homescreen.getDefaultHomescreen(context,
+                mNumberHomescreens / 2);
+        if (mDefaultHomescreen >= mNumberHomescreens) {
+            mDefaultHomescreen = mNumberHomescreens / 2;
+        }
+        mShowSearchBar = PreferencesProvider.Interface.Homescreen.getShowSearchBar(context);
+        mResizeAnyWidget = PreferencesProvider.Interface.Homescreen.getResizeAnyWidget(context);
+        mShowScrollingIndicator = PreferencesProvider.Interface.Homescreen.getShowScrollingIndicator(context);
+        mFadeScrollingIndicator = PreferencesProvider.Interface.Homescreen.getFadeScrollingIndicator(context);
 
         mLauncher = (Launcher) context;
         initWorkspace();
@@ -379,7 +399,7 @@ public class Workspace extends SmoothPagedView
      */
     protected void initWorkspace() {
         Context context = getContext();
-        mCurrentPage = mDefaultPage;
+        mCurrentPage = mDefaultHomescreen;
         Launcher.setScreen(mCurrentPage);
         LauncherApplication app = (LauncherApplication)context.getApplicationContext();
         mIconCache = app.getIconCache();
@@ -387,11 +407,30 @@ public class Workspace extends SmoothPagedView
         setWillNotDraw(false);
         setChildrenDrawnWithCacheEnabled(true);
 
+        final Resources res = getResources();
+
+        LayoutInflater inflater =
+                (LayoutInflater) getContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        for (int i = 0; i < mNumberHomescreens; i++) {
+            inflater.inflate(R.layout.workspace_screen, this);
+        }
+
         try {
-            final Resources res = getResources();
             mBackground = res.getDrawable(R.drawable.apps_customize_bg);
         } catch (Resources.NotFoundException e) {
             // In this case, we will skip drawing background protection
+        }
+
+        if (!mShowSearchBar) {
+            int paddingTop = 0;
+            if (mLauncher.getCurrentOrientation() == Configuration.ORIENTATION_PORTRAIT) {
+                paddingTop = (int)res.getDimension(R.dimen.qsb_bar_hidden_inset);
+            }
+            setPadding(0, paddingTop, getPaddingRight(), getPaddingBottom());
+        }
+
+        if (!mShowScrollingIndicator) {
+            disableScrollingIndicator();
         }
 
         mChangeStateAnimationListener = new AnimatorListenerAdapter() {
@@ -416,11 +455,6 @@ public class Workspace extends SmoothPagedView
         mDisplayHeight = display.getHeight();
         mWallpaperTravelWidth = (int) (mDisplayWidth *
                 wallpaperTravelToScreenWidthRatio(mDisplayWidth, mDisplayHeight));
-    }
-
-    @Override
-    protected int getScrollMode() {
-        return SmoothPagedView.X_LARGE_MODE;
     }
 
     @Override
@@ -698,7 +732,9 @@ public class Workspace extends SmoothPagedView
     }
 
     protected void onPageEndMoving() {
-        super.onPageEndMoving();
+        if (mFadeScrollingIndicator) {
+            hideScrollingIndicator(false);
+        }
 
         if (isHardwareAccelerated()) {
             updateChildrenLayersEnabled();
@@ -727,6 +763,15 @@ public class Workspace extends SmoothPagedView
         super.notifyPageSwitchListener();
         Launcher.setScreen(mCurrentPage);
     };
+
+    @Override
+    protected void flashScrollingIndicator(boolean animated) {
+        if (mFadeScrollingIndicator) {
+            super.flashScrollingIndicator(animated);
+        } else {
+            showScrollingIndicator(true);
+        }
+    }
 
     // As a ratio of screen height, the total distance we want the parallax effect to span
     // horizontally
@@ -1138,13 +1183,14 @@ public class Workspace extends SmoothPagedView
         return Math.min(r / threshold, 1.0f);
     }
 
-    private void screenScrolledLargeUI(int screenCenter) {
+    private void screenScrolledLargeUI(int screenScroll) {
         if (isSwitchingState()) return;
         boolean isInOverscroll = false;
-        for (int i = 0; i < getChildCount(); i++) {
+        int currentScreen = (int) Math.floor((double) (screenScroll / (float) getMeasuredWidth()));
+        for (int i = currentScreen; i <= Math.min(getChildCount(), currentScreen + 1); i++) {
             CellLayout cl = (CellLayout) getChildAt(i);
             if (cl != null) {
-                float scrollProgress = getScrollProgress(screenCenter, cl, i);
+                float scrollProgress = getScrollProgress(screenScroll, cl, i);
                 float rotation = WORKSPACE_ROTATION * scrollProgress;
                 float translationX = getOffsetXForRotation(rotation, cl.getWidth(), cl.getHeight());
 
@@ -1183,19 +1229,21 @@ public class Workspace extends SmoothPagedView
         invalidate();
     }
 
-    private void screenScrolledStandardUI(int screenCenter) {
+    private void screenScrolledStandardUI(int screenScroll) {
         if (mOverScrollX < 0 || mOverScrollX > mMaxScrollX) {
             int index = mOverScrollX < 0 ? 0 : getChildCount() - 1;
             CellLayout cl = (CellLayout) getChildAt(index);
-            float scrollProgress = getScrollProgress(screenCenter, cl, index);
-            cl.setOverScrollAmount(Math.abs(scrollProgress), index == 0);
-            float rotation = - WORKSPACE_OVERSCROLL_ROTATION * scrollProgress;
-            cl.setCameraDistance(mDensity * CAMERA_DISTANCE);
-            cl.setPivotX(cl.getMeasuredWidth() * (index == 0 ? 0.75f : 0.25f));
-            cl.setPivotY(cl.getMeasuredHeight() * 0.5f);
-            cl.setRotationY(rotation);
-            cl.setOverscrollTransformsDirty(true);
-            setFadeForOverScroll(Math.abs(scrollProgress));
+            if (getChildCount() > 1) {
+                float scrollProgress = getScrollProgress(screenScroll, cl, index);
+                cl.setOverScrollAmount(Math.abs(scrollProgress), index == 0);
+                float rotation = - WORKSPACE_OVERSCROLL_ROTATION * scrollProgress;
+                cl.setCameraDistance(mDensity * CAMERA_DISTANCE);
+                cl.setPivotX(cl.getMeasuredWidth() * (index == 0 ? 0.75f : 0.25f));
+                cl.setPivotY(cl.getMeasuredHeight() * 0.5f);
+                cl.setRotationY(rotation);
+                cl.setOverscrollTransformsDirty(true);
+                setFadeForOverScroll(Math.abs(scrollProgress));
+            }
         } else {
             if (mOverscrollFade != 0) {
                 setFadeForOverScroll(0);
@@ -1209,14 +1257,14 @@ public class Workspace extends SmoothPagedView
     }
 
     @Override
-    protected void screenScrolled(int screenCenter) {
+    protected void screenScrolled(int screenScroll) {
         if (LauncherApplication.isScreenLarge()) {
             // We don't call super.screenScrolled() here because we handle the adjacent pages alpha
             // ourselves (for efficiency), and there are no scrolling indicators to update.
-            screenScrolledLargeUI(screenCenter);
+            screenScrolledLargeUI(screenScroll);
         } else {
-            super.screenScrolled(screenCenter);
-            screenScrolledStandardUI(screenCenter);
+            super.screenScrolled(screenScroll);
+            screenScrolledStandardUI(screenScroll);
         }
     }
 
@@ -1609,6 +1657,9 @@ public class Workspace extends SmoothPagedView
             finalScaleFactor = mSpringLoadedShrinkFactor - (stateIsSmall ? 0.1f : 0);
             if (oldStateIsNormal && stateIsSmall) {
                 zoomIn = false;
+                if (animated) {
+                    hideScrollingIndicator(false, sScrollIndicatorFadeOutShortDuration);
+                }
                 setLayoutScale(finalScaleFactor);
                 updateChildrenLayersEnabled();
             } else {
@@ -2253,7 +2304,10 @@ public class Workspace extends SmoothPagedView
 
                         final LauncherAppWidgetHostView hostView = (LauncherAppWidgetHostView) cell;
                         AppWidgetProviderInfo pinfo = hostView.getAppWidgetInfo();
-                        if (pinfo.resizeMode != AppWidgetProviderInfo.RESIZE_NONE) {
+                        boolean hasMovedCells = ((mTargetCell[0] != mDragInfo.cellX) || (mTargetCell[1] != mDragInfo.cellY));
+
+                        if ((pinfo.resizeMode != AppWidgetProviderInfo.RESIZE_NONE || mResizeAnyWidget)
+                                && !hasMovedCells && !hasMovedLayouts) {
                             final Runnable resizeRunnable = new Runnable() {
                                 public void run() {
                                     DragLayer dragLayer = mLauncher.getDragLayer();
@@ -3488,12 +3542,12 @@ public class Workspace extends SmoothPagedView
     void moveToDefaultScreen(boolean animate) {
         if (!isSmall()) {
             if (animate) {
-                snapToPage(mDefaultPage);
+                snapToPage(mDefaultHomescreen);
             } else {
-                setCurrentPage(mDefaultPage);
+                setCurrentPage(mDefaultHomescreen);
             }
         }
-        getChildAt(mDefaultPage).requestFocus();
+        getChildAt(mDefaultHomescreen).requestFocus();
     }
 
     @Override
@@ -3521,13 +3575,14 @@ public class Workspace extends SmoothPagedView
         mOverscrollFade = fade;
         float reducedFade = 0.5f + 0.5f * (1 - fade);
         final ViewGroup parent = (ViewGroup) getParent();
+
         final ImageView qsbDivider = (ImageView) (parent.findViewById(R.id.qsb_divider));
         final ImageView dockDivider = (ImageView) (parent.findViewById(R.id.dock_divider));
         final ImageView scrollIndicator = getScrollingIndicator();
 
         cancelScrollingIndicatorAnimations();
-        if (qsbDivider != null) qsbDivider.setAlpha(reducedFade);
+        if (qsbDivider != null && mShowSearchBar) qsbDivider.setAlpha(reducedFade);
         if (dockDivider != null) dockDivider.setAlpha(reducedFade);
-        scrollIndicator.setAlpha(1 - fade);
+        if (scrollIndicator != null && mShowScrollingIndicator) scrollIndicator.setAlpha(1 - fade);
     }
 }

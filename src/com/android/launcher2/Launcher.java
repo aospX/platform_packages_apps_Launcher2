@@ -29,6 +29,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.SearchManager;
 import android.app.StatusBarManager;
+import android.app.UiModeManager;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProviderInfo;
@@ -95,6 +96,7 @@ import android.widget.Toast;
 import com.android.common.Search;
 import com.android.launcher.R;
 import com.android.launcher2.DropTarget.DragObject;
+import com.android.launcher2.preference.*;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -110,7 +112,7 @@ import java.util.HashMap;
  */
 public final class Launcher extends Activity
         implements View.OnClickListener, OnLongClickListener, LauncherModel.Callbacks,
-                   AllAppsView.Watcher, View.OnTouchListener {
+                   View.OnTouchListener {
     static final String TAG = "Launcher";
     static final boolean LOGD = false;
 
@@ -121,7 +123,8 @@ public final class Launcher extends Activity
     private static final int MENU_WALLPAPER_SETTINGS = Menu.FIRST + 1;
     private static final int MENU_MANAGE_APPS = MENU_WALLPAPER_SETTINGS + 1;
     private static final int MENU_SYSTEM_SETTINGS = MENU_MANAGE_APPS + 1;
-    private static final int MENU_HELP = MENU_SYSTEM_SETTINGS + 1;
+    private static final int MENU_PREFERENCES = MENU_SYSTEM_SETTINGS + 1;
+    private static final int MENU_HELP = MENU_PREFERENCES + 1;
 
     private static final int REQUEST_CREATE_SHORTCUT = 1;
     private static final int REQUEST_CREATE_APPWIDGET = 5;
@@ -132,8 +135,8 @@ public final class Launcher extends Activity
 
     static final String EXTRA_SHORTCUT_DUPLICATE = "duplicate";
 
-    static final int SCREEN_COUNT = 7;
-    static final int DEFAULT_SCREEN = 3;
+    static final int MAX_SCREEN_COUNT = 7;
+    static final int DEFAULT_SCREEN = 2;
 
     static final int DIALOG_CREATE_SHORTCUT = 1;
     static final int DIALOG_RENAME_FOLDER = 2;
@@ -250,6 +253,9 @@ public final class Launcher extends Activity
 
     private BubbleTextView mWaitingForResume;
 
+    // Preferences
+    private boolean mShowSearchBar;
+
     private Runnable mBuildLayersRunnable = new Runnable() {
         public void run() {
             if (mWorkspace != null) {
@@ -282,6 +288,9 @@ public final class Launcher extends Activity
         mAppWidgetManager = AppWidgetManager.getInstance(this);
         mAppWidgetHost = new LauncherAppWidgetHost(this, APPWIDGET_HOST_ID);
         mAppWidgetHost.startListening();
+
+        // Preferences
+        mShowSearchBar = PreferencesProvider.Interface.Homescreen.getShowSearchBar(this);
 
         if (PROFILE_STARTUP) {
             android.os.Debug.startMethodTracing(
@@ -348,9 +357,13 @@ public final class Launcher extends Activity
         }
         mSearchDropTargetBar.onSearchPackagesChanged(searchVisible, voiceVisible);
 
-        // On large interfaces, we want the screen to auto-rotate based on the current orientation
-        if (LauncherApplication.isScreenLarge() || Build.TYPE.contentEquals("eng")) {
+
+        final UiModeManager uiModeManager = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
+        if (PreferencesProvider.Interface.General.getAutoRotate(this) ||
+                uiModeManager.getCurrentModeType() != Configuration.UI_MODE_TYPE_NORMAL) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        } else {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_NOSENSOR);
         }
     }
 
@@ -552,6 +565,10 @@ public final class Launcher extends Activity
     protected void onResume() {
         super.onResume();
         mPaused = false;
+        // Restart launcher when preferences are changed
+        if (preferencesChanged()) {
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
         if (mRestoring || mOnResumeNeedsLoad) {
             mWorkspaceLoading = true;
             mModel.startLoader(this, true);
@@ -769,6 +786,11 @@ public final class Launcher extends Activity
 
         // Get the search/delete bar
         mSearchDropTargetBar = (SearchDropTargetBar) mDragLayer.findViewById(R.id.qsb_bar);
+
+        // Hide the search divider if we are hiding search bar
+        if (!mShowSearchBar && getCurrentOrientation() == Configuration.ORIENTATION_LANDSCAPE) {
+            ((View) findViewById(R.id.qsb_divider)).setVisibility(View.GONE);
+        }
 
         // Setup AppsCustomize
         mAppsCustomizeTabHost = (AppsCustomizeTabHost)
@@ -1337,6 +1359,9 @@ public final class Launcher extends Activity
         Intent settings = new Intent(android.provider.Settings.ACTION_SETTINGS);
         settings.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        Intent preferences = new Intent().setClass(this, Preferences.class);
+        preferences.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         String helpUrl = getString(R.string.help_url);
         Intent help = new Intent(Intent.ACTION_VIEW, Uri.parse(helpUrl));
         help.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -1353,6 +1378,10 @@ public final class Launcher extends Activity
             .setIcon(android.R.drawable.ic_menu_preferences)
             .setIntent(settings)
             .setAlphabeticShortcut('P');
+        menu.add(0, MENU_PREFERENCES, 0, R.string.menu_preferences)
+            .setIcon(android.R.drawable.ic_menu_preferences)
+            .setIntent(preferences)
+            .setAlphabeticShortcut('O');
         if (!helpUrl.isEmpty()) {
             menu.add(0, MENU_HELP, 0, R.string.menu_help)
                 .setIcon(android.R.drawable.ic_menu_help)
@@ -2124,13 +2153,6 @@ public final class Launcher extends Activity
         return (mState == State.APPS_CUSTOMIZE);
     }
 
-    // AllAppsView.Watcher
-    public void zoomed(float zoom) {
-        if (zoom == 1.0f) {
-            mWorkspace.setVisibility(View.GONE);
-        }
-    }
-
     /**
      * Helper method for the cameraZoomIn/cameraZoomOut animations
      * @param view The view being animated
@@ -2369,7 +2391,6 @@ public final class Launcher extends Activity
                         ((LauncherTransitionable) fromView).onLauncherTransitionEnd(instance,
                                 alphaAnim, true);
                     }
-                    mWorkspace.hideScrollingIndicator(false);
                 }
             });
 
@@ -2491,25 +2512,35 @@ public final class Launcher extends Activity
 
     void hideDockDivider() {
         if (mQsbDivider != null && mDockDivider != null) {
-            mQsbDivider.setVisibility(View.INVISIBLE);
+            if (mShowSearchBar) {
+                mQsbDivider.setVisibility(View.INVISIBLE);
+            }
             mDockDivider.setVisibility(View.INVISIBLE);
         }
     }
 
     void showDockDivider(boolean animated) {
         if (mQsbDivider != null && mDockDivider != null) {
-            mQsbDivider.setVisibility(View.VISIBLE);
+            if (mShowSearchBar) {
+                mQsbDivider.setVisibility(View.VISIBLE);
+            }
             mDockDivider.setVisibility(View.VISIBLE);
             if (mDividerAnimator != null) {
                 mDividerAnimator.cancel();
-                mQsbDivider.setAlpha(1f);
+                if (mShowSearchBar) {
+                    mQsbDivider.setAlpha(1f);
+                }
                 mDockDivider.setAlpha(1f);
                 mDividerAnimator = null;
             }
             if (animated) {
                 mDividerAnimator = new AnimatorSet();
-                mDividerAnimator.playTogether(ObjectAnimator.ofFloat(mQsbDivider, "alpha", 1f),
-                        ObjectAnimator.ofFloat(mDockDivider, "alpha", 1f));
+                if (mShowSearchBar) {
+                    mDividerAnimator.playTogether(ObjectAnimator.ofFloat(mQsbDivider, "alpha", 1f),
+                            ObjectAnimator.ofFloat(mDockDivider, "alpha", 1f));
+                } else {
+                    mDividerAnimator.play(ObjectAnimator.ofFloat(mDockDivider, "alpha", 1f));
+                }
                 mDividerAnimator.setDuration(mSearchDropTargetBar.getTransitionInDuration());
                 mDividerAnimator.start();
             }
@@ -2566,10 +2597,14 @@ public final class Launcher extends Activity
         }
     }
 
+    public int getCurrentOrientation() {
+        return getResources().getConfiguration().orientation;
+    }
+
     /** Maps the current orientation to an index for referencing orientation correct global icons */
     private int getCurrentOrientationIndexForGlobalIcons() {
         // default - 0, landscape - 1
-        switch (getResources().getConfiguration().orientation) {
+        switch (getCurrentOrientation()) {
         case Configuration.ORIENTATION_LANDSCAPE:
             return 1;
         default:
@@ -2896,7 +2931,7 @@ public final class Launcher extends Activity
         if (mWorkspace != null) {
             return mWorkspace.getCurrentPage();
         } else {
-            return SCREEN_COUNT / 2;
+            return DEFAULT_SCREEN;
         }
     }
 
@@ -3182,7 +3217,6 @@ public final class Launcher extends Activity
     }
 
     /* Cling related */
-    private static final String PREFS_KEY = "com.android.launcher2.prefs";
     private boolean isClingsEnabled() {
         // disable clings when running in a test harness
         if(ActivityManager.isRunningInTestHarness()) return false;
@@ -3219,7 +3253,7 @@ public final class Launcher extends Activity
                     cling.setVisibility(View.GONE);
                     cling.cleanup();
                     SharedPreferences prefs =
-                        getSharedPreferences("com.android.launcher2.prefs", Context.MODE_PRIVATE);
+                        getSharedPreferences(PreferencesProvider.PREFERENCES_KEY, Context.MODE_PRIVATE);
                     SharedPreferences.Editor editor = prefs.edit();
                     editor.putBoolean(flag, true);
                     editor.commit();
@@ -3243,7 +3277,7 @@ public final class Launcher extends Activity
     public void showFirstRunWorkspaceCling() {
         // Enable the clings only if they have not been dismissed before
         SharedPreferences prefs =
-            getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE);
+            getSharedPreferences(PreferencesProvider.PREFERENCES_KEY, Context.MODE_PRIVATE);
         if (isClingsEnabled() && !prefs.getBoolean(Cling.WORKSPACE_CLING_DISMISSED_KEY, false)) {
             initCling(R.id.workspace_cling, null, false, 0);
         } else {
@@ -3253,7 +3287,7 @@ public final class Launcher extends Activity
     public void showFirstRunAllAppsCling(int[] position) {
         // Enable the clings only if they have not been dismissed before
         SharedPreferences prefs =
-            getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE);
+            getSharedPreferences(PreferencesProvider.PREFERENCES_KEY, Context.MODE_PRIVATE);
         if (isClingsEnabled() && !prefs.getBoolean(Cling.ALLAPPS_CLING_DISMISSED_KEY, false)) {
             initCling(R.id.all_apps_cling, position, true, 0);
         } else {
@@ -3263,7 +3297,7 @@ public final class Launcher extends Activity
     public Cling showFirstRunFoldersCling() {
         // Enable the clings only if they have not been dismissed before
         SharedPreferences prefs =
-            getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE);
+            getSharedPreferences(PreferencesProvider.PREFERENCES_KEY, Context.MODE_PRIVATE);
         Cling cling = null;
         if (isClingsEnabled() && !prefs.getBoolean(Cling.FOLDER_CLING_DISMISSED_KEY, false)) {
             cling = initCling(R.id.folder_cling, null, true, 0);
@@ -3290,6 +3324,18 @@ public final class Launcher extends Activity
     public void dismissFolderCling(View v) {
         Cling cling = (Cling) findViewById(R.id.folder_cling);
         dismissCling(cling, Cling.FOLDER_CLING_DISMISSED_KEY, DISMISS_CLING_DURATION);
+    }
+
+    public boolean preferencesChanged() {
+        SharedPreferences prefs =
+            getSharedPreferences(PreferencesProvider.PREFERENCES_KEY, Context.MODE_PRIVATE);
+        boolean preferencesChanged = prefs.getBoolean(PreferencesProvider.PREFERENCES_CHANGED, false);
+        if (preferencesChanged) {
+            SharedPreferences.Editor editor = prefs.edit();
+                    editor.putBoolean(PreferencesProvider.PREFERENCES_CHANGED, false);
+                    editor.commit();
+        }
+        return preferencesChanged;
     }
 
     /**

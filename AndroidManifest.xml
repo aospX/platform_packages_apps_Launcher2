@@ -68,8 +68,7 @@
             android:clearTaskOnLaunch="true"
             android:stateNotNeeded="true"
             android:theme="@style/Theme"
-            android:windowSoftInputMode="adjustPan"
-            android:screenOrientation="nosensor">
+            android:windowSoftInputMode="adjustPan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
@@ -102,6 +101,9 @@
                 <category android:name="android.intent.category.DREAM" />
             </intent-filter>
         </activity>
+
+        <activity android:name="com.android.launcher2.preference.Preferences"
+            android:label="@string/preferences_title" />
 
         <!-- Intent received used to install shortcuts from other applications -->
         <receiver

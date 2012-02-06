@@ -39,28 +39,18 @@
         android:layout_gravity="bottom"
         android:layout_marginBottom="@dimen/button_bar_height" />
 
-    <!-- The workspace contains 7 screens of cells -->
+    <!-- The workspace contains 5 screens of cells -->
     <com.android.launcher2.Workspace
         android:id="@+id/workspace"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:paddingTop="@dimen/qsb_bar_height_inset"
         android:paddingBottom="@dimen/button_bar_height"
-        launcher:defaultScreen="3"
         launcher:cellCountX="4"
         launcher:cellCountY="4"
         launcher:pageSpacing="@dimen/workspace_page_spacing"
         launcher:scrollIndicatorPaddingLeft="@dimen/workspace_divider_padding_left"
-        launcher:scrollIndicatorPaddingRight="@dimen/workspace_divider_padding_right">
-
-        <include android:id="@+id/cell1" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell2" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell3" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell4" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell5" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell6" layout="@layout/workspace_screen" />
-        <include android:id="@+id/cell7" layout="@layout/workspace_screen" />
-    </com.android.launcher2.Workspace>
+        launcher:scrollIndicatorPaddingRight="@dimen/workspace_divider_padding_right" />
 
     <include layout="@layout/hotseat"
         android:id="@+id/hotseat"
@@ -90,3 +80,4 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 </com.android.launcher2.DragLayer>
+

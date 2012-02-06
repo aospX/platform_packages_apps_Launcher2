@@ -63,7 +63,6 @@ public abstract class PagedView extends ViewGroup {
     private static final int MIN_LENGTH_FOR_FLING = 25;
 
     private static final int PAGE_SNAP_ANIMATION_DURATION = 550;
-    protected static final float NANOTIME_DIV = 1000000000.0f;
 
     private static final float OVERSCROLL_ACCELERATE_FACTOR = 2;
     private static final float OVERSCROLL_DAMP_FACTOR = 0.14f;
@@ -77,7 +76,6 @@ public abstract class PagedView extends ViewGroup {
     protected int mSnapVelocity = 100;
 
     protected float mDensity;
-    protected float mSmoothingTime;
     protected float mTouchX;
 
     protected boolean mFirstLayout = true;
@@ -93,7 +91,7 @@ public abstract class PagedView extends ViewGroup {
     protected float mLastMotionXRemainder;
     protected float mLastMotionY;
     protected float mTotalMotionX;
-    private int mLastScreenCenter = -1;
+    private int mLastScreenScroll = -1;
     private int[] mChildOffsets;
     private int[] mChildRelativeOffsets;
     private int[] mChildOffsetsWithLayoutScale;
@@ -165,7 +163,6 @@ public abstract class PagedView extends ViewGroup {
     protected boolean mUsePagingTouchSlop = true;
 
     // If true, the subclass should directly update mScrollX itself in its computeScroll method
-    // (SmoothPagedView does this)
     protected boolean mDeferScrollUpdate = false;
 
     protected boolean mIsPageMoving = false;
@@ -184,6 +181,7 @@ public abstract class PagedView extends ViewGroup {
     private boolean mHasScrollIndicator = true;
     protected static final int sScrollIndicatorFadeInDuration = 150;
     protected static final int sScrollIndicatorFadeOutDuration = 650;
+    protected static final int sScrollIndicatorFadeOutShortDuration = 150;
     protected static final int sScrollIndicatorFlashDuration = 650;
 
     // If set, will defer loading associated pages until the scrolling settles
@@ -390,18 +388,16 @@ public abstract class PagedView extends ViewGroup {
         }
 
         mTouchX = x;
-        mSmoothingTime = System.nanoTime() / NANOTIME_DIV;
     }
 
-    // we moved this functionality to a helper function so SmoothPagedView can reuse it
-    protected boolean computeScrollHelper() {
+    @Override
+    public void computeScroll() {
         if (mScroller.computeScrollOffset()) {
             // Don't bother scrolling if the page does not need to be moved
             if (mScrollX != mScroller.getCurrX() || mScrollY != mScroller.getCurrY()) {
                 scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
             }
             invalidate();
-            return true;
         } else if (mNextPage != INVALID_PAGE) {
             mCurrentPage = Math.max(0, Math.min(mNextPage, getPageCount() - 1));
             mNextPage = INVALID_PAGE;
@@ -426,14 +422,7 @@ public abstract class PagedView extends ViewGroup {
                 ev.getText().add(getCurrentPageDescription());
                 sendAccessibilityEventUnchecked(ev);
             }
-            return true;
         }
-        return false;
-    }
-
-    @Override
-    public void computeScroll() {
-        computeScrollHelper();
     }
 
     @Override
@@ -617,7 +606,7 @@ public abstract class PagedView extends ViewGroup {
         }
     }
 
-    protected void screenScrolled(int screenCenter) {
+    protected void screenScrolled(int screenScroll) {
         if (isScrollingIndicatorEnabled()) {
             updateScrollingIndicator();
         }
@@ -625,7 +614,7 @@ public abstract class PagedView extends ViewGroup {
             for (int i = 0; i < getChildCount(); i++) {
                 View child = getChildAt(i);
                 if (child != null) {
-                    float scrollProgress = getScrollProgress(screenCenter, child, i);
+                    float scrollProgress = getScrollProgress(screenScroll, child, i);
                     float alpha = 1 - Math.abs(scrollProgress);
                     child.setFastAlpha(alpha);
                     child.fastInvalidate();
@@ -743,14 +732,9 @@ public abstract class PagedView extends ViewGroup {
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        int halfScreenSize = getMeasuredWidth() / 2;
-        // mOverScrollX is equal to mScrollX when we're within the normal scroll range. Otherwise
-        // it is equal to the scaled overscroll position.
-        int screenCenter = mOverScrollX + halfScreenSize;
-
-        if (screenCenter != mLastScreenCenter || mForceScreenScrolled) {
-            screenScrolled(screenCenter);
-            mLastScreenCenter = screenCenter;
+        if (mOverScrollX != mLastScreenScroll || mForceScreenScrolled) {
+            screenScrolled(mOverScrollX);
+            mLastScreenScroll = mOverScrollX;
             mForceScreenScrolled = false;
         }
 
@@ -1037,7 +1021,6 @@ public abstract class PagedView extends ViewGroup {
                 mLastMotionX = x;
                 mLastMotionXRemainder = 0;
                 mTouchX = mScrollX;
-                mSmoothingTime = System.nanoTime() / NANOTIME_DIV;
                 pageBeginMoving();
             }
             // Either way, cancel any pending longpress
@@ -1058,8 +1041,9 @@ public abstract class PagedView extends ViewGroup {
         }
     }
 
-    protected float getScrollProgress(int screenCenter, View v, int page) {
+    protected float getScrollProgress(int screenScroll, View v, int page) {
         final int halfScreenSize = getMeasuredWidth() / 2;
+        int screenCenter = screenScroll + getMeasuredWidth() / 2;
 
         int totalDistance = getScaledMeasuredWidth(v) + mPageSpacing;
         int delta = screenCenter - (getChildOffset(page) -
@@ -1182,7 +1166,6 @@ public abstract class PagedView extends ViewGroup {
                 // scrolled position (which is discrete).
                 if (Math.abs(deltaX) >= 1.0f) {
                     mTouchX += deltaX;
-                    mSmoothingTime = System.nanoTime() / NANOTIME_DIV;
                     if (!mDeferScrollUpdate) {
                         scrollBy((int) deltaX, 0);
                         if (DEBUG) Log.d(TAG, "onTouchEvent().Scrolling: " + deltaX);
@@ -1777,6 +1760,10 @@ public abstract class PagedView extends ViewGroup {
     }
 
     protected void showScrollingIndicator(boolean immediately) {
+        showScrollingIndicator(immediately, sScrollIndicatorFadeInDuration);
+    }
+
+    protected void showScrollingIndicator(boolean immediately, int duration) {
         if (getChildCount() <= 1) return;
         if (!isScrollingIndicatorEnabled()) return;
 
@@ -1790,7 +1777,7 @@ public abstract class PagedView extends ViewGroup {
                 mScrollIndicator.setAlpha(1f);
             } else {
                 mScrollIndicatorAnimator = ObjectAnimator.ofFloat(mScrollIndicator, "alpha", 1f);
-                mScrollIndicatorAnimator.setDuration(sScrollIndicatorFadeInDuration);
+                mScrollIndicatorAnimator.setDuration(duration);
                 mScrollIndicatorAnimator.start();
             }
         }
@@ -1803,6 +1790,10 @@ public abstract class PagedView extends ViewGroup {
     }
 
     protected void hideScrollingIndicator(boolean immediately) {
+        hideScrollingIndicator(immediately, sScrollIndicatorFadeOutDuration);
+    }
+
+    protected void hideScrollingIndicator(boolean immediately, int duration) {
         if (getChildCount() <= 1) return;
         if (!isScrollingIndicatorEnabled()) return;
 
@@ -1816,7 +1807,7 @@ public abstract class PagedView extends ViewGroup {
                 mScrollIndicator.setAlpha(0f);
             } else {
                 mScrollIndicatorAnimator = ObjectAnimator.ofFloat(mScrollIndicator, "alpha", 0f);
-                mScrollIndicatorAnimator.setDuration(sScrollIndicatorFadeOutDuration);
+                mScrollIndicatorAnimator.setDuration(duration);
                 mScrollIndicatorAnimator.addListener(new AnimatorListenerAdapter() {
                     private boolean cancelled = false;
                     @Override
@@ -1833,6 +1824,22 @@ public abstract class PagedView extends ViewGroup {
                 mScrollIndicatorAnimator.start();
             }
         }
+    }
+
+    protected void enableScrollingIndicator() {
+        mHasScrollIndicator = true;
+        getScrollingIndicator();
+        if (mScrollIndicator != null) {
+            mScrollIndicator.setVisibility(View.VISIBLE);
+        }
+    }
+
+    protected void disableScrollingIndicator() {
+        if (mScrollIndicator != null) {
+            mScrollIndicator.setVisibility(View.GONE);
+        }
+        mHasScrollIndicator = false;
+        mScrollIndicator = null;
     }
 
     /**
