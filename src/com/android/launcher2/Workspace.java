@@ -243,6 +243,7 @@ public class Workspace extends PagedView
     private int mDefaultHomescreen;
     private boolean mShowSearchBar;
     private boolean mResizeAnyWidget;
+    private boolean mScrollWallpaper;
     private boolean mShowScrollingIndicator;
     private boolean mFadeScrollingIndicator;
 
@@ -325,6 +326,7 @@ public class Workspace extends PagedView
         }
         mShowSearchBar = PreferencesProvider.Interface.Homescreen.getShowSearchBar(context);
         mResizeAnyWidget = PreferencesProvider.Interface.Homescreen.getResizeAnyWidget(context);
+        mScrollWallpaper = PreferencesProvider.Interface.Homescreen.getScrollWallpaper(context);
         mShowScrollingIndicator = PreferencesProvider.Interface.Homescreen.getShowScrollingIndicator(context);
         mFadeScrollingIndicator = PreferencesProvider.Interface.Homescreen.getFadeScrollingIndicator(context);
 
@@ -442,19 +444,23 @@ public class Workspace extends PagedView
             @Override
             public void onAnimationEnd(Animator animation) {
                 mIsSwitchingState = false;
-                mWallpaperOffset.setOverrideHorizontalCatchupConstant(false);
+                if (mScrollWallpaper) {
+                    mWallpaperOffset.setOverrideHorizontalCatchupConstant(false);
+                }
                 mAnimator = null;
                 updateChildrenLayersEnabled();
             }
         };
 
         mSnapVelocity = 100;
-        mWallpaperOffset = new WallpaperOffsetInterpolator();
         Display display = mLauncher.getWindowManager().getDefaultDisplay();
         mDisplayWidth = display.getWidth();
         mDisplayHeight = display.getHeight();
-        mWallpaperTravelWidth = (int) (mDisplayWidth *
-                wallpaperTravelToScreenWidthRatio(mDisplayWidth, mDisplayHeight));
+        if (mScrollWallpaper) {
+            mWallpaperOffset = new WallpaperOffsetInterpolator();
+            mWallpaperTravelWidth = (int) (mDisplayWidth *
+                    wallpaperTravelToScreenWidthRatio(mDisplayWidth, mDisplayHeight));
+        }
     }
 
     @Override
@@ -878,6 +884,11 @@ public class Workspace extends PagedView
         }
     }
 
+    private void centerWallpaperOffset() {
+        mWallpaperManager.setWallpaperOffsetSteps(0.5f, 0);
+        mWallpaperManager.setWallpaperOffsets(getWindowToken(), 0.5f, 0);
+    }
+
     public void updateWallpaperOffsetImmediately() {
         mUpdateWallpaperOffsetImmediately = true;
     }
@@ -907,13 +918,17 @@ public class Workspace extends PagedView
     @Override
     protected void updateCurrentPageScroll() {
         super.updateCurrentPageScroll();
-        computeWallpaperScrollRatio(mCurrentPage);
+        if (mScrollWallpaper) {
+            computeWallpaperScrollRatio(mCurrentPage);
+        }
     }
 
     @Override
     protected void snapToPage(int whichPage) {
         super.snapToPage(whichPage);
-        computeWallpaperScrollRatio(whichPage);
+        if (mScrollWallpaper) {
+            computeWallpaperScrollRatio(whichPage);
+        }
     }
 
     private void computeWallpaperScrollRatio(int page) {
@@ -1046,7 +1061,9 @@ public class Workspace extends PagedView
     @Override
     public void computeScroll() {
         super.computeScroll();
-        syncWallpaperOffsetWithScroll();
+        if (mScrollWallpaper) {
+            syncWallpaperOffsetWithScroll();
+        }
     }
 
     void showOutlines() {
@@ -1311,7 +1328,9 @@ public class Workspace extends PagedView
 
     @Override
     protected void onDraw(Canvas canvas) {
-        updateWallpaperOffsets();
+        if (mScrollWallpaper) {
+            updateWallpaperOffsets();
+        }
 
         // Draw the background gradient if necessary
         if (mBackground != null && mBackgroundAlpha > 0.0f && mDrawBackground) {
@@ -3187,6 +3206,9 @@ public class Workspace extends PagedView
         // needed
         updateChildrenLayersEnabled();
         setWallpaperDimension();
+        if (!mScrollWallpaper) {
+            centerWallpaperOffset();
+        }
     }
 
     /**
