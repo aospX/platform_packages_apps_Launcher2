@@ -53,6 +53,10 @@ public final class PreferencesProvider {
                 final SharedPreferences preferences = context.getSharedPreferences(PREFERENCES_KEY, 0);
                 return preferences.getBoolean("ui_drawer_indicator_fade", true);
             }
+            public static boolean getShowMarketButton(Context context) {
+                final SharedPreferences preferences = context.getSharedPreferences(PREFERENCES_KEY, 0);
+                return preferences.getBoolean("ui_drawer_button_market", true);
+            }
         }
 
         public static class General {

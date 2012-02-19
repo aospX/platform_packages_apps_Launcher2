@@ -255,6 +255,7 @@ public final class Launcher extends Activity
 
     // Preferences
     private boolean mShowSearchBar;
+    private boolean mShowMarketButton;
 
     private Runnable mBuildLayersRunnable = new Runnable() {
         public void run() {
@@ -291,6 +292,7 @@ public final class Launcher extends Activity
 
         // Preferences
         mShowSearchBar = PreferencesProvider.Interface.Homescreen.getShowSearchBar(this);
+        mShowMarketButton = PreferencesProvider.Interface.Drawer.getShowMarketButton(this);
 
         if (PROFILE_STARTUP) {
             android.os.Debug.startMethodTracing(
@@ -2786,7 +2788,11 @@ public final class Launcher extends Activity
             mAppMarketIntent = intent;
             sAppMarketIcon[coi] = updateTextButtonWithIconFromExternalActivity(
                     R.id.market_button, activityName, R.drawable.ic_launcher_market_holo);
-            marketButton.setVisibility(View.VISIBLE);
+            if (mShowMarketButton) {
+                marketButton.setVisibility(View.VISIBLE);
+            } else {
+                marketButton.setVisibility(View.GONE);
+            }
         } else {
             // We should hide and disable the view so that we don't try and restore the visibility
             // of it when we swap between drag & normal states from IconDropTarget subclasses.

@@ -82,6 +82,12 @@
                     android:defaultValue="true"
                     android:dependency="ui_drawer_indicator_enable" />
             </PreferenceCategory>
+            <PreferenceCategory android:title="@string/preferences_interface_drawer_button_category">
+                <CheckBoxPreference android:key="ui_drawer_button_market"
+                    android:title="@string/preferences_interface_drawer_button_market_title"
+                    android:summary="@string/preferences_interface_drawer_button_market_summary"
+                    android:defaultValue="true" />
+            </PreferenceCategory>
         </PreferenceScreen>
 
         <!-- General -->
