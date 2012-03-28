@@ -1798,7 +1798,7 @@ public class Workspace extends PagedView
                     invalidate();
                     for (int i = 0; i < getChildCount(); i++) {
                         final CellLayout cl = (CellLayout) getChildAt(i);
-                        cl.fastInvalidate();
+                        cl.invalidate();
                         cl.setFastTranslationX(a * mOldTranslationXs[i] + b * mNewTranslationXs[i]);
                         cl.setFastTranslationY(a * mOldTranslationYs[i] + b * mNewTranslationYs[i]);
                         cl.setFastScaleX(a * mOldScaleXs[i] + b * mNewScaleXs[i]);
@@ -1808,6 +1808,7 @@ public class Workspace extends PagedView
                         cl.setBackgroundAlphaMultiplier(a * mOldBackgroundAlphaMultipliers[i] +
                                 b * mNewBackgroundAlphaMultipliers[i]);
                         cl.setFastAlpha(a * mOldAlphas[i] + b * mNewAlphas[i]);
+                        cl.invalidate();
                     }
                     syncChildrenLayersEnabledOnVisiblePages();
                 }
