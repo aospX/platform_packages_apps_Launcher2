@@ -6,8 +6,8 @@
     <!-- The alpha of the AppsCustomize bg in spring loaded mode -->
     <integer name="config_appsCustomizeSpringLoadedBgAlpha">45</integer>
     <!-- Fade in/out duration of icons being dragged from the trays -->
-    <integer name="config_dragAppsCustomizeIconFadeInDuration">150</integer>
-    <integer name="config_dragAppsCustomizeIconFadeOutDuration">200</integer>
+    <integer name="config_dragAppsCustomizeIconFadeInDuration">90</integer>
+    <integer name="config_dragAppsCustomizeIconFadeOutDuration">90</integer>
     <integer name="config_dragAppsCustomizeIconFadeAlpha">100</integer>
     <integer name="config_workspaceUnshrinkTime">300</integer>
     <!-- Out of 100, the percent to shrink the workspace during spring loaded mode. -->
@@ -23,8 +23,8 @@
 
     <!-- Fade/zoom in/out duration & scale in the AllApps transition.
          Note: This should be less than the workspaceShrinkTime as they happen together. -->
-    <integer name="config_appsCustomizeZoomInTime">300</integer>
-    <integer name="config_appsCustomizeZoomOutTime">550</integer>
+    <integer name="config_appsCustomizeZoomInTime">250</integer>
+    <integer name="config_appsCustomizeZoomOutTime">250</integer>
     <integer name="config_appsCustomizeZoomScaleFactor">7</integer>
     <integer name="config_appsCustomizeFadeInTime">200</integer>
     <integer name="config_appsCustomizeFadeOutTime">150</integer>
@@ -71,7 +71,7 @@
     <integer name="config_dropAnimMaxDuration">500</integer>
 
     <!-- The duration of the UserFolder opening and closing animation -->
-    <integer name="config_folderAnimDuration">120</integer>
+    <integer name="config_folderAnimDuration">80</integer>
 
     <!-- The distance at which the animation should take the max duration -->
     <integer name="config_dropAnimMaxDist">800</integer>

@@ -60,9 +60,9 @@ public abstract class PagedView extends ViewGroup {
     protected static final int INVALID_PAGE = -1;
 
     // the min drag distance for a fling to register, to prevent random page shifts
-    private static final int MIN_LENGTH_FOR_FLING = 25;
+    private static final int MIN_LENGTH_FOR_FLING = 22;
 
-    private static final int PAGE_SNAP_ANIMATION_DURATION = 550;
+    private static final int PAGE_SNAP_ANIMATION_DURATION = 175;
 
     private static final float OVERSCROLL_ACCELERATE_FACTOR = 2;
     private static final float OVERSCROLL_DAMP_FACTOR = 0.14f;
@@ -73,7 +73,7 @@ public abstract class PagedView extends ViewGroup {
     private static final float SIGNIFICANT_MOVE_THRESHOLD = 0.4f;
 
     // the velocity at which a fling gesture will cause us to snap to the next page
-    protected int mSnapVelocity = 100;
+    protected int mSnapVelocity = 88;
 
     protected float mDensity;
     protected float mTouchX;
