@@ -88,7 +88,6 @@ public class Hotseat extends FrameLayout {
         if (mCellCountY < 0) mCellCountY = LauncherModel.getCellCountY();
         mContent = (CellLayout) findViewById(R.id.layout);
         mContent.setGridSize(mCellCountX, mCellCountY);
-        setLayerType(LAYER_TYPE_HARDWARE, null);
 
         resetLayout();
     }
